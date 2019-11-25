@@ -1,0 +1,22 @@
+[
+  {
+    "TOKEN": 340481,
+    "SYMBOL": "HDFC",
+    "ENTRY": 2220,
+    "SL": 2358.5,
+    "EXIT": 2220,
+    "LOT": 250,
+	"TYPE":"BUY",
+	"EXCHANGE":"NSE"
+  },
+  {
+    "TOKEN": 779521,
+    "SYMBOL": "SBIN",
+    "ENTRY": 333,
+    "SL": 346.8,
+    "EXIT": 312,
+    "LOT": 3000,
+	"TYPE": "SELL",
+	"EXCHANGE":"NSE"
+  }
+]

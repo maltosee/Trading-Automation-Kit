@@ -1,0 +1,21 @@
+{
+  "name": "test-webhooks",
+  "version": "1.0.0",
+  "description": "test",
+  "main": "index.js",
+  "dependencies": {
+    "date-format": "^3.0.0",
+    "dateformat": "^3.0.3",
+    "escape-html": "^1.0.3",
+    "kiteconnect": "^3.0.0-beta.3",
+    "lockfile": "^1.0.4",
+    "math-abs": "^1.0.2",
+    "simple-node-logger": "^18.12.23"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
