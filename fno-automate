@@ -1,0 +1,15 @@
+{
+    "api_key": "bejtlvvs8bo43qxb",
+    "access_token": "ISITHPaCf6UBWSYI024Xhd62oM05C7Ey",
+    "host": "mysql-01.coqgcxnvqjeu.us-east-1.rds.amazonaws.com",
+    "port": 3306,
+    "database": "FNOTRADING",
+    "user": "admin",
+	"password": "fsnot2020",
+	"start_time":550,
+	"end_time":1290,
+	"mult_factor":0.4,
+	"max_risk":40000,
+	"order_type":"regular",
+	"max_positions":4
+}
