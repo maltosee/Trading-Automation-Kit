@@ -21,6 +21,6 @@
 	"twilio_sandbox_num": "+14155238886",
 	"twilio_subscribed_num":"+919972107070",
 	"master_zone_file_path":"master-zones.json",
-	"zone_file_path":"zones.json",
+	"zone_file_path":"zones2.json",
 	"future_margin":151000
 }

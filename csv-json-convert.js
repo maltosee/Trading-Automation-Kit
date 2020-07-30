@@ -3,8 +3,12 @@
 const CSVToJSON = require('csvtojson');
 const fs = require('fs');
 
+let input= process.argv[2];
+let output= input.split(".");
+let output_file= output[0]+".json";
+
 // convert users.csv file to JSON array
-CSVToJSON().fromFile('zones.csv')
+CSVToJSON().fromFile(input)
     .then(zones => {
 
         // users is a JSON array
@@ -12,7 +16,7 @@ CSVToJSON().fromFile('zones.csv')
         console.log(zones);
 		try 
 		{
-			fs.writeFileSync('zones.json', JSON.stringify(zones));
+			fs.writeFileSync(output_file, JSON.stringify(zones));
 			console.log("JSON data is saved.");
 		} catch (error) 
 		{
