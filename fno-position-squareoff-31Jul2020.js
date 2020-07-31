@@ -154,7 +154,7 @@ async function square_off_tgt_sl()
 										{
 												//log.info('Searching for trading instrument in json config -',JSON.stringify(cfg_trades));
 											
-												let sqoff_order_resp={}, option_limit_order_exists=false, fut_limit_order_exists=false;
+												let sqoff_order_resp={}, option_limit_order_exists=false;
 												
 												trade = cfg_trades.find(trade => (trade['TRADE_INSTRUMENT'] == results[index]['tradingsymbol']));
 												
@@ -229,24 +229,23 @@ async function square_off_tgt_sl()
 																	/** check order history for the day**/
 																	for (let i=0; i< arr_orders.length; i++)
 																	{
-																		   if((arr_orders[i]['tradingsymbol']==trade['TRADE_INSTRUMENT'])&& 
-																			   (arr_orders[i]['transaction_type']=="SELL")
-																			   )
-																			{
+																	   if((arr_orders[i]['tradingsymbol']==trade['TRADE_INSTRUMENT'])&& 
+																		   arr_orders[i]['transaction_type']=="SELL")
+																		{
+																			
+																				option_limit_order_exists=true;
+																				log.error('square off order already exists for ', top_key);
 																				
-																					option_limit_order_exists=true;
-																					log.error('square off order already exists for ', top_key);
-																					
-																					await client.messages
-																					  .create({
-																						 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
-																						 body: 'Square off order already exists for ', top_key,
-																						 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
-																					   });
-																					 
-																			 
-																			}
-																	 }
+																				await client.messages
+																				  .create({
+																					 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
+																					 body: 'Square off order already exists for ', top_key,
+																					 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
+																				   });
+																				 
+																		 
+																		}
+																	}
 																		
 																			
 																	if(!option_limit_order_exists)
@@ -299,50 +298,28 @@ async function square_off_tgt_sl()
 																}
 																else
 																{
-																	    let sqoff_type=(trade['ENTRY']>trade['TARGET'])?"BUY":"SELL";
-																	    let top_key=trade['EXCHANGE']+":"+trade['TRADE_INSTRUMENT'];
-																		
 																	 
-																		for (let i=0; i< arr_orders.length; i++)
-																		{
-																			   if((arr_orders[i]['tradingsymbol']==trade['TRADE_INSTRUMENT'])&& 
-																				   (arr_orders[i]['transaction_type']==sqoff_type))
-																				   
-																				{
-																					
-																						fut_limit_order_exists=true;
-																						log.error('square off order already exists for ', top_key);
-																						 
-																				 
-																				}
-																		 }
+																	 let sqoff_type=(trade['ENTRY']>trade['TARGET'])?"BUY":"SELL";// reverse logic of place order
+																	 let product_type=(trade['TRADE_INSTRUMENT_TYPE']=="CASH")?cfg_static['cash_product']:cfg_static['fno_product'];
 																	 
 																	 
-																	 
-																		if(!fut_limit_order_exists)
-																		{
-																				 // reverse logic of place order
-																				 let product_type=(trade['TRADE_INSTRUMENT_TYPE']=="CASH")?cfg_static['cash_product']:cfg_static['fno_product'];
-																				 
-																				 
-																				 log.info('Before calling place order for -',trade['SYMBOL'],' with product ',product_type );
-																				//let pc=new Order_place(params);
-																				 sqoff_order_resp = await kc.placeOrder(cfg_static['order_type'], {
-																								"exchange": trade['EXCHANGE'],
-																								"tradingsymbol": trade['TRADE_INSTRUMENT'],
-																								"transaction_type":sqoff_type,
-																								"quantity": trade['LOT_SIZE'],
-																								"product": product_type,
-																								"order_type": "MARKET"
-																							});
-																		 }
+																	 log.info('Before calling place order for -',trade['SYMBOL'],' with product ',product_type );
+																	//let pc=new Order_place(params);
+																	 sqoff_order_resp = await kc.placeOrder(cfg_static['order_type'], {
+																					"exchange": trade['EXCHANGE'],
+																					"tradingsymbol": trade['TRADE_INSTRUMENT'],
+																					"transaction_type":sqoff_type,
+																					"quantity": trade['LOT_SIZE'],
+																					"product": product_type,
+																					"order_type": "MARKET"
+																				});
 																	 
 																 }
 															
 														
 																if (sqoff_order_resp.order_id == undefined)
 																{
-																	if(!option_limit_order_exists && !fut_limit_order_exists)
+																	if(!option_limit_order_exists)
 																	{
 																			log.error('Couldnt place square off order for ',trade['SYMBOL']);
 																			

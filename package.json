@@ -24,8 +24,8 @@
     "node-uuid": ">= 1.4.1",
     "pm2": "^4.4.0",
     "save": "^2.4.0",
-    "send_sms": "file:send_sms",
     "simple-node-logger": "^18.12.23",
+    "twilio": "^3.48.1",
     "utf-8-validate": "^5.0.2",
     "uuid": "^8.2.0"
   },

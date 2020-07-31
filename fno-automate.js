@@ -29,7 +29,9 @@ const master_trades= new config_items(cfg_static['master_zone_file_path']);
 //const accountSid = 'ACd9e70d2f8cb3bc946caef5b4acde9117';
 //const authToken = '064f1fd797bb147b91887557eedceede';
 const client = require('twilio')(cfg_static['twilio_sid'], cfg_static['twilio_token']);
-
+//const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID,process.env.TWILIO_AUTH_TOKEN);
+//console.log(process.env.TWILIO_ACCOUNT_SID);
+//console.log(process.env.TWILIO_AUTH_TOKEN);
 const futures_margins = url.parse('https://api.kite.trade/margins/futures');
 
 
@@ -184,6 +186,7 @@ async function main_logic()
 															let option_limit_order_exists=false, new_order_resp={};
 															let user_margin_response={};
 															let net_margin=0, reqd_margin=0;
+															let future_limit_order_exists=false;
 															
 															log.info('filtered zone ', JSON.stringify(zones[index]));
 															
@@ -230,8 +233,7 @@ async function main_logic()
 																		/** check order history for the day**/
 																		for (let i=0; i< arr_orders.length; i++)
 																		{
-																			if((arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT'])&& 
-																			arr_orders[i]['transaction_type']=="BUY")
+																			if((arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT']))
 																			{
 
 																					log.info('Pending order already exists for ', top_key);
@@ -284,6 +286,7 @@ async function main_logic()
 																					{
 																						log.info('Before placing order -',zones[index]['TRADE_INSTRUMENT'],' with limit -', limit_price);
 																						
+
 																						reqd_margin= zones[index]['LOT_SIZE']*limit_price;
 																						
 																						//log.info('net margin -', net_margin, 'red_margin -',reqd_margin);
@@ -293,7 +296,7 @@ async function main_logic()
 																							new_order_resp = await kc.placeOrder(cfg_static['order_type'], {
 																											"exchange": zones[index]['EXCHANGE'],
 																											"tradingsymbol": zones[index]['TRADE_INSTRUMENT'],
-																											"transaction_type": trade_type,
+																											"transaction_type": "BUY",
 																											"quantity": zones[index]['LOT_SIZE'],
 																											"product": cfg_static['fno_product'],
 																											"order_type": "LIMIT",
@@ -320,33 +323,54 @@ async function main_logic()
 																		
 																		let product_type=(zones[index]['TRADE_INSTRUMENT_TYPE']=='CASH')?cfg_static['cash_product']:cfg_static['fno_product'];
 																		
-																		if(product_type=='CASH')
-																		{
-																			reqd_margin= zones[index]['LOT_SIZE']*resp_ltp[x]['last_price'];
-																		}
-																		else 
-																		{
-																			reqd_margin = cfg_static['future_margin'];
-																		}
 																		
-																		//log.info('net margin -', net_margin, 'red_margin -',reqd_margin);
-																		
-																		if(net_margin>=reqd_margin)
+																		for (let i=0; i< arr_orders.length; i++)
 																		{
-																		
-																			log.info('Before placing order -',zones[index]['TRADE_INSTRUMENT'],' with product -', product_type);
-																			
-																			new_order_resp = await kc.placeOrder(cfg_static['order_type'], {
-																						"exchange": zones[index]['EXCHANGE'],
-																						"tradingsymbol": zones[index]['TRADE_INSTRUMENT'],
-																						"transaction_type": trade_type,
-																						"quantity": zones[index]['LOT_SIZE'],
-																						"product": product_type,
-																						"order_type": "MARKET"
-																					});
-																		}
-																		else
-																		{
+																			if((arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT']))
+																			{
+
+																					log.info('Pending order already exists for ', top_key);
+																					future_limit_order_exists=true;
+																					
+																					await client.messages
+																					  .create({
+																						 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
+																						 body: 'Taking new position : Pending  order already exists for ' + arr_orders[i]['tradingsymbol'],
+																						 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
+																					   });
+																					  
+																			}
+																		 }
+																		 
+																		 if(!future_limit_order_exists)
+																		 {
+																				if(product_type=='CASH')
+																				{
+																					reqd_margin= zones[index]['LOT_SIZE']*resp_ltp[x]['last_price'];
+																				}
+																				else 
+																				{
+																					reqd_margin = cfg_static['future_margin'];
+																				}
+																				
+																				//log.info('net margin -', net_margin, 'red_margin -',reqd_margin);
+																				
+																				if(net_margin>=reqd_margin)
+																				{
+																				
+																					log.info('Before placing order -',zones[index]['TRADE_INSTRUMENT'],' with product -', product_type);
+																					
+																					new_order_resp = await kc.placeOrder(cfg_static['order_type'], {
+																								"exchange": zones[index]['EXCHANGE'],
+																								"tradingsymbol": zones[index]['TRADE_INSTRUMENT'],
+																								"transaction_type": trade_type,
+																								"quantity": zones[index]['LOT_SIZE'],
+																								"product": product_type,
+																								"order_type": "MARKET"
+																							});
+																				}
+																				else
+																				{
 																			 log.error('Insufficient margin for -' , zones[index]['TRADE_INSTRUMENT']);
 																			 new_order_resp['order_id']='dummy';
 																			 await client.messages
@@ -357,7 +381,7 @@ async function main_logic()
 																			   });
 																			 
 																		 }
-																
+																		}
 																  }
 																  
 																  if (new_order_resp.order_id == undefined)
