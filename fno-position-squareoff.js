@@ -222,23 +222,40 @@ async function square_off_tgt_sl()
 													
 															
 													       
-															trans_type=(trade['ENTRY']>trade['TARGET'])?"SELL":"BUY";
+															
+                                                           trans_type="";
+                                                           log.info('Trade config -', JSON.stringify(trade));
+                                                        
+                                                           log.info('Entry - ', trade['ENTRY'],' Target - ', trade['TARGET'], ' SL - ',trade['STOP_LOSS']);
+                                                        
+                                                            trans_type=(parseFloat(trade['ENTRY'])>parseFloat(trade['TARGET']))?"SELL":"BUY";
+                                                        
+                                                            /**if(trade['ENTRY']>trade['TARGET'])
+                                                                {
+                                                                    trans_type="SELL";
+                                                                    log.info('Setting to SELL');
+                                                                }
+                                                                else
+                                                                {
+                                                                    trans_type="BUY";        
+                                                                    log.info('Setting to BUY');
+                                                                }**/
 															
 															mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
 															
-															current_risk+= Math.round(abs((trade['STOP_LOSS']-trade['ENTRY'])*results[index]['quantity']*mult_factor));
+															//current_risk+= Math.round(abs((trade['STOP_LOSS']-trade['ENTRY'])*results[index]['quantity']*mult_factor));
 															
 															let x ='NSE'+":"+trade['SYMBOL'];
 															let resp_ohlc= await kc.getOHLC(x);
                                                         
                                                           //  log.info('Resp OHLC -',JSON.stringify(resp_ohlc));
 													         	
-															sl_hit=0;
-															tgt_hit=0;
+                                                             sl_hit=0;
+                                                             tgt_hit=0;
 														
 															if(trans_type=="SELL")
 															{
-																	//log.info('SELL');
+																	log.info('IN SELL');
 																	if(parseFloat(trade['STOP_LOSS'])< parseFloat(resp_ohlc[x]['last_price']))
 																	{
 																		sl_hit=1;
@@ -248,7 +265,7 @@ async function square_off_tgt_sl()
 																		tgt_hit=1; 
 																	
 																	}
-                                                                    else if(parseFloat(resp_ohlc[x]['ohlc']['low'])<=((1-cfg_static['trailing_sl'])*parseFloat(trade['ENTRY'])))
+                                                                   /** else if(parseFloat(resp_ohlc[x]['ohlc']['low'])<=((1-cfg_static['trailing_sl'])*parseFloat(trade['ENTRY'])))
                                                                     {
                                                                         if(parseFloat(resp_ohlc[x]['last_price'])>=parseFloat(trade['ENTRY']))
                                                                             {
@@ -257,7 +274,7 @@ async function square_off_tgt_sl()
                                                                             }
                                                                         
                                                                             
-                                                                     }
+                                                                     }**/
 																	
 															}
 															else
@@ -265,7 +282,7 @@ async function square_off_tgt_sl()
                                                                // log.info('Trans type - ',trans_type);
                                                                // log.info('Trade config -', JSON.stringify(trade));    
                                                                 
-                                                                
+                                                                log.info('IN BUY');
 																if(parseFloat(trade['STOP_LOSS'])> parseFloat(resp_ohlc[x]['last_price']))
 																{
 																	sl_hit=1;
@@ -275,7 +292,7 @@ async function square_off_tgt_sl()
 																	tgt_hit=1; 
 																
 																}
-                                                                else if(parseFloat(resp_ohlc[x]['ohlc']['high'])>=((1+cfg_static['trailing_sl'])*parseFloat(trade['ENTRY'])))
+                                                               /** else if(parseFloat(resp_ohlc[x]['ohlc']['high'])>=((1+cfg_static['trailing_sl'])*parseFloat(trade['ENTRY'])))
                                                                 {
                                                                     if(parseFloat(resp_ohlc[x]['last_price'])<=parseFloat(trade['ENTRY']))
                                                                     {
@@ -284,11 +301,11 @@ async function square_off_tgt_sl()
                                                                     }
 
 
-                                                                 }
+                                                                 } **/
 															}
 													
 													
-															if(sl_hit || tgt_hit || tl_sl_hit) 
+															if(sl_hit || tgt_hit) 
 															{
 																
 																	log.info('LTP hash ',JSON.stringify(resp_ohlc),'Low ',resp_ohlc[x]['ohlc']['low'],' High ',resp_ohlc[x]['ohlc']['high']);
@@ -381,8 +398,9 @@ async function square_off_tgt_sl()
 																	}
 																	else
 																	{
-																			let sqoff_type=(trade['ENTRY']>trade['TARGET'])?"BUY":"SELL";
-																			let top_key=trade['EXCHANGE']+":"+trade['TRADE_INSTRUMENT'];
+																			let sqoff_type=(parseFloat(trade['ENTRY'])>parseFloat(trade['TARGET']))?"BUY":"SELL";
+																			
+                                                                            let top_key=trade['EXCHANGE']+":"+trade['TRADE_INSTRUMENT'];
 																		 
 																			for (let i=0; i< arr_orders.length; i++)
 																			{
@@ -474,7 +492,7 @@ async function square_off_tgt_sl()
 											else
 											{
 												
-												current_risk+=-1*results[index]['pnl'];
+												current_risk+=-1*(parseFloat(results[index]['pnl']));
 												//log.info('Updating risk from PNL - ', current_risk);
 												
 											}
