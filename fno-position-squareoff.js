@@ -123,7 +123,7 @@ async function square_off_tgt_sl()
 		
 		
 		
-		var trade, sl_hit=0, tgt_hit=0, tl_sl_hit=0, sl_readjust=0,arr=[],mult_factor=1, trans_type;
+		var trade, sl_hit=0, tgt_hit=0, tl_sl_hit=0, sl_readjust=0,arr=[],mult_factor=1, trans_type,process_entry=0;
 		
 		var run;
 		
@@ -147,7 +147,8 @@ async function square_off_tgt_sl()
 		while(true)
 		{
 		  
-			  try
+			 await sleep(cfg_static['sleep_window']); 
+			 try
 			  {
 	
 						
@@ -165,6 +166,8 @@ async function square_off_tgt_sl()
                         holdings= await kc.getHoldings();      
                   
                        // log.info('Scanning through holdings-', JSON.stringify(holdings));
+                  
+                        
                   
 						positions = await kc.getPositions();
                   
@@ -187,6 +190,8 @@ async function square_off_tgt_sl()
             
 				
 						log.info('Looping through -', JSON.stringify(results));
+                  
+                        process_entry=0;
 				
 						for (let index =0; index <results.length; index++)
 						{
@@ -200,7 +205,24 @@ async function square_off_tgt_sl()
 										}
 										else
 										{
-											if(results[index]['quantity']!=0)
+											if(results[index]['product']==cfg_static['cash_product'])
+                                            {
+                                               if(results[index]['quantity']>0) 
+                                                {
+                                                    process_entry=1;
+                                                }
+                                            }
+                                            else
+                                            {
+                                            
+                                                if(results[index]['quantity']!=0)
+                                                {
+                                                    process_entry=1;
+                                                }
+                                            
+                                            }
+                                            
+                                            if(process_entry)
 											{
 													//log.info('Searching for trading instrument in json config -',JSON.stringify(cfg_trades));
 												
@@ -522,5 +544,10 @@ async function square_off_tgt_sl()
 
 		
 		return arr;
+}
+
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 

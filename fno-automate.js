@@ -11,6 +11,7 @@ var url = require('url');
 //console.log('Before load config');
 
 var config_items = require('./load_config.js');
+//var sleep = require('sleep');
 
 //console.log('after load config.. argyment '+ process.argv[2]);
 
@@ -504,7 +505,8 @@ async function main_logic()
 															}
 
 													}
-												
+												        //await sleep(500);
+                                                        
 												}
 											}
 									 
@@ -540,6 +542,10 @@ async function main_logic()
 			log.error(err);
 		}
 		
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function sessionHook() {
