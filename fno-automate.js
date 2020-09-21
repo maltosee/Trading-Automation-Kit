@@ -167,6 +167,7 @@ async function main_logic()
 											risk_buffer= cfg_static['max_risk']-current_risk;
                                          
                                             log.info('Risk Buffer - ', risk_buffer);
+										 risk_buffer=20000;
                                          
 											
 
@@ -185,7 +186,7 @@ async function main_logic()
 														if(risk_buffer>0)
 														{
 														
-																let x= "NSE:"+zones[index]['SYMBOL'];
+																let x= cfg_static['default_exchange']+":"+zones[index]['SYMBOL'];
 																log.info('Iteration - ',index.toString(),' - symbol ',x,' Zone -', zones[index]['ZONE']);
 																												
 																let resp_ltp = await kc.getLTP(x);
@@ -589,8 +590,22 @@ async function get_position_instruments()
 {
         let holdings=await kc.getHoldings();
 		let positions= await kc.getPositions();
+        let results=[];
+    
+        if(JSON.stringify(holdings) != '{}')
+        {
+            results=[].concat(holdings,positions['net']);
+            //results.push(holdings);
+            //holdings_exist=true;
+        }
+        else
+        {
+            results=positions['net'];
+            
+        }
+        
 		
-        let results=[].concat(holdings,positions['net']);
+        //let results=[].concat(holdings,positions['net']);
 		
         let arr=[],mult_factor=1;
 		var trade, config_risk;
@@ -598,48 +613,85 @@ async function get_position_instruments()
 		for (let i=0; i<results.length; i++)
 		{
 				arr.push(results[i]['tradingsymbol']);
-				
-				if(results[i]['quantity']==0)
-				{
-						current_risk+=-1*results[i]['pnl'];
+                
+                if(results[i]['product']==cfg_static['cash_product'])
+                {
+                        trade = master_trades.find(trade => trade['TRADE_INSTRUMENT']==results[i]['tradingsymbol']);
 
-					
-				}
-				else
-				{
-						trade = master_trades.find(trade => trade['TRADE_INSTRUMENT']==results[i]['tradingsymbol']);
-						max_positions++;
-						
-						if(trade == undefined)
-						{
-								log.error ('Catastrophe -- position not found in file for ', results[i]['tradingsymbol']);
-								
-							/**	await client.messages
-									  .create({
-										 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
-										 body: 'position not found in file for '+results[i]['tradingsymbol'],
-										 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
-									   });**/
-									   
-								throw('Stop loss config missing for '+ results[i]['tradingsymbol']);
-									  
-								
-						}
-						else
-						{
-							log.info('Risk config for -',JSON.stringify(trade));
-							mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
-                            
-                            config_risk=Math.round(abs(((trade['STOP_LOSS']-trade['ENTRY'])*trade['LOT_SIZE'])))*mult_factor;
-                            log.info('Risk config - ', config_risk);
-                            log.info('Results pnl -',results[i]['pnl'] );
-                            log.info('Risk added ',Math.max(config_risk,(-1*results[i]['pnl'])) );
-                            
-							current_risk+= Math.max(config_risk,(-1*results[i]['pnl']));
-							
-						}
-				}
-		}
+                        if(trade == undefined)
+                        {
+                               log.error ('Catastrophe -- position not found in file for ', results[i]['tradingsymbol']);
+                               throw('Stop loss config missing for '+ results[i]['tradingsymbol']);
+                        }
+                        else
+                        {
+                                log.info('Risk config for -',JSON.stringify(trade));
+                                mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
+
+
+                        }
+
+
+                        if(results[i]['t1_quantity']>0 || results[i]['quantity']>0) // holdings
+                        {
+                           // let qty= results[i]['t1_quantity']>0 ?results[i]['t1_quantity']
+                            current_risk+=abs(trade['STOP_LOSS'] -results[i]['average_price'])*Math.max(results[i]['t1_quantity'],results[i]['quantity']);
+                        }
+                        else if(results[i]['quantity']==0) // sold off positions same day
+                        {
+                            current_risk+= (trade['ENTRY']-results[i]['average_price'])*abs(trade['LOT_SIZE']); //if profit risk reduces
+                        }
+                
+                }
+                else
+                {
+                    
+                        if(results[i]['quantity']==0)
+                        {
+                                current_risk+=-1*results[i]['pnl'];
+
+
+                        }
+                        else
+                        {
+                                trade = master_trades.find(trade => trade['TRADE_INSTRUMENT']==results[i]['tradingsymbol']);
+                                max_positions++;
+
+                                if(trade == undefined)
+                                {
+                                        log.error ('Catastrophe -- position not found in file for ', results[i]['tradingsymbol']);
+
+                                    /**	await client.messages
+                                              .create({
+                                                 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
+                                                 body: 'position not found in file for '+results[i]['tradingsymbol'],
+                                                 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
+                                               });**/
+
+                                        throw('Stop loss config missing for '+ results[i]['tradingsymbol']);
+
+
+                                }
+                                else
+                                {
+                                    log.info('Risk config for -',JSON.stringify(trade));
+                                    mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
+
+                                    config_risk=Math.round(abs(((trade['STOP_LOSS']-trade['ENTRY'])*trade['LOT_SIZE'])))*mult_factor;
+                                    log.info('Risk config - ', config_risk);
+                                    log.info('Results pnl -',results[i]['pnl'] );
+                                    log.info('Risk added ',Math.max(config_risk,(-1*results[i]['pnl'])) );
+
+                                    current_risk+= Math.max(config_risk,(-1*results[i]['pnl']));
+
+                                }
+                          }
+                
+                 
+                    }
+        
+        
+        }
 		//log.info('current_risk - ',current_risk);
 		
 		return arr;
