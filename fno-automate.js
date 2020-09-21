@@ -140,7 +140,7 @@ async function main_logic()
 											max_positions=0;
 											//log.info('Config trades -'+ JSON.stringify(cfg_trades));
 											
-										//	log.info('before calling square off');
+										    //log.info('before calling square off');
 											arr_positions = await get_position_instruments();
 											
 											log.info('after calling square off , risk -', current_risk);
@@ -167,11 +167,12 @@ async function main_logic()
 											risk_buffer= cfg_static['max_risk']-current_risk;
                                          
                                             log.info('Risk Buffer - ', risk_buffer);
-										 risk_buffer=20000;
+										  //risk_buffer=20000;
                                          
-											
-
-											zones = await filter_existing_positions(arr_positions);					
+											if(arr_positions.length)
+                                            {
+											     zones = await filter_existing_positions(arr_positions);
+                                            }
 											
 											for (index=0; index<zones.length; index++)
 											{
@@ -589,111 +590,121 @@ async function time_check(timezone, start_time, end_time)
 async function get_position_instruments()
 {
         let holdings=await kc.getHoldings();
-		let positions= await kc.getPositions();
-        let results=[];
+		let position_arr= await kc.getPositions();
+        let positions=position_arr['net'];
     
-        if(JSON.stringify(holdings) != '{}')
-        {
-            results=[].concat(holdings,positions['net']);
-            //results.push(holdings);
-            //holdings_exist=true;
-        }
-        else
-        {
-            results=positions['net'];
-            
-        }
-        
-		
-        //let results=[].concat(holdings,positions['net']);
-		
+  
         let arr=[],mult_factor=1;
 		var trade, config_risk;
-				
-		for (let i=0; i<results.length; i++)
-		{
-				arr.push(results[i]['tradingsymbol']);
-                
-                if(results[i]['product']==cfg_static['cash_product'])
+        
+       // log.info('Holdings - ', JSON.stringify(holdings));
+       // log.info('Positions - ', JSON.stringify(positions));
+    
+        for (let index =0; index <holdings.length; index++)
+        {
+                if(holdings[index]['t1_quantity']>0 || holdings[index]['quantity']>0)
                 {
-                        trade = master_trades.find(trade => trade['TRADE_INSTRUMENT']==results[i]['tradingsymbol']);
+                        arr.push(holdings[index]['tradingsymbol']);
+                       // log.info('Assessing risk for ', holdings[index]['tradingsymbol']);
+                    
+                        trade = master_trades.find(trade => (trade['TRADE_INSTRUMENT'] == holdings[index]['tradingsymbol']));
 
                         if(trade == undefined)
                         {
-                               log.error ('Catastrophe -- position not found in file for ', results[i]['tradingsymbol']);
-                               throw('Stop loss config missing for '+ results[i]['tradingsymbol']);
+                                log.error ('Catastrophe -- position not found in file for ', holdings[index]['tradingsymbol']);
+
+                                //err_count[results[index]['tradingsymbol']]= true;
+
+                                throw('Stop loss config missing for -' + holdings[index]['tradingsymbol']);
+
                         }
                         else
                         {
-                                log.info('Risk config for -',JSON.stringify(trade));
-                                mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
-
+                                //let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
+                                let lot_qty= Math.max(holdings[index]['t1_quantity'],holdings[index]['quantity']);
+                                current_risk+=(parseFloat(trade['STOP_LOSS'])-parseFloat(holdings[index]['average_price']))*lot_qty;
 
                         }
 
 
-                        if(results[i]['t1_quantity']>0 || results[i]['quantity']>0) // holdings
-                        {
-                           // let qty= results[i]['t1_quantity']>0 ?results[i]['t1_quantity']
-                            current_risk+=abs(trade['STOP_LOSS'] -results[i]['average_price'])*Math.max(results[i]['t1_quantity'],results[i]['quantity']);
-                        }
-                        else if(results[i]['quantity']==0) // sold off positions same day
-                        {
-                            current_risk+= (trade['ENTRY']-results[i]['average_price'])*abs(trade['LOT_SIZE']); //if profit risk reduces
-                        }
-                
                 }
-                else
-                {
-                    
-                        if(results[i]['quantity']==0)
-                        {
-                                current_risk+=-1*results[i]['pnl'];
+        
+            
+        }
+    
+         for (let index =0; index <positions.length; index++)
+         {
+                
+              arr.push(positions[index]['tradingsymbol']);
+              //log.info('Assessing risk for ', positions[index]['tradingsymbol']);
+              trade = master_trades.find(trade => (trade['TRADE_INSTRUMENT'] == positions[index]['tradingsymbol']));
+            
+                    if(trade == undefined)
+                    {
+                                log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
 
+                                //err_count[results[index]['tradingsymbol']]= true;
 
-                        }
-                        else
-                        {
-                                trade = master_trades.find(trade => trade['TRADE_INSTRUMENT']==results[i]['tradingsymbol']);
-                                max_positions++;
+                                throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
 
-                                if(trade == undefined)
+                    }
+                    else
+                    {
+                               // let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
+                        
+                               // log.info('Trade config ',JSON.stringify(trade));
+                               // log.info('Position:', JSON.stringify(positions[index]));
+                        
+                                if(positions[index]['product']==cfg_static['cash_product'] )
                                 {
-                                        log.error ('Catastrophe -- position not found in file for ', results[i]['tradingsymbol']);
+                                      //  log.info('Cash Risk');    
+                                        if(positions[index]['quantity']>0)
+                                        {
+                                                current_risk+= (abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))* positions[index]['quantity']);
+                                        }
+                                        else if(positions[index]['quantity']==0)
+                                        {
+                                            current_risk+= -1 *positions[index]['pnl'];
+                                        }
+                                        else
+                                        {
+                                            if(positions[index]['average_price']>=trade['TARGET'])
+                                            {
+                                                    current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(positions[index]['average_price']))*positions[index]['quantity'];
+                                            }
+                                            else if (positions[index]['average_price']<=trade['STOP_LOSS'])
+                                            {
+                                                     current_risk+= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))*abs(positions[index]['quantity']);
+                                            }
+                                            else
+                                            {
+                                                log.error('Square off price not in between TGT and SL for ',positions[index]['tradingsymbol']);
+                                            }
 
-                                    /**	await client.messages
-                                              .create({
-                                                 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
-                                                 body: 'position not found in file for '+results[i]['tradingsymbol'],
-                                                 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
-                                               });**/
-
-                                        throw('Stop loss config missing for '+ results[i]['tradingsymbol']);
-
-
+                                        }
+                                    
+                                    
                                 }
                                 else
                                 {
-                                    log.info('Risk config for -',JSON.stringify(trade));
-                                    mult_factor=(trade['TRADE_INSTRUMENT_TYPE']== 'OPTION'?cfg_static['mult_factor']:1);
-
-                                    config_risk=Math.round(abs(((trade['STOP_LOSS']-trade['ENTRY'])*trade['LOT_SIZE'])))*mult_factor;
-                                    log.info('Risk config - ', config_risk);
-                                    log.info('Results pnl -',results[i]['pnl'] );
-                                    log.info('Risk added ',Math.max(config_risk,(-1*results[i]['pnl'])) );
-
-                                    current_risk+= Math.max(config_risk,(-1*results[i]['pnl']));
-
+                                        //log.info('FNO risk');
+                                        if(positions[index]['quantity']==0)
+                                        {
+                                            current_risk+= -1 *positions[index]['pnl'];
+                                        }
+                                        else
+                                        {
+                                            current_risk+= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))*abs(positions[index]['quantity']);
+                                        }
+                                        
                                 }
-                          }
-                
-                 
+
+                             //log.info('Current Risk is now ',current_risk);  
+
                     }
-        
-        
+
         }
-		//log.info('current_risk - ',current_risk);
-		
+   
 		return arr;
 }
 
