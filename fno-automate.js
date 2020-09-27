@@ -143,7 +143,7 @@ async function main_logic()
 										    //log.info('before calling square off');
 											arr_positions = await get_position_instruments();
 											
-											log.info('after calling square off , risk -', current_risk);
+											log.info('after calling square off , risk - ', current_risk);
 											
 											if(max_positions>cfg_static['max_positions'])
 											{
@@ -167,7 +167,7 @@ async function main_logic()
 											risk_buffer= cfg_static['max_risk']-current_risk;
                                          
                                             log.info('Risk Buffer - ', risk_buffer);
-										  //risk_buffer=20000;
+										    //risk_buffer=20000;
                                          
 											if(arr_positions.length)
                                             {
@@ -594,10 +594,10 @@ async function get_position_instruments()
         let positions=position_arr['net'];
     
   
-        let arr=[],mult_factor=1;
-		var trade, config_risk;
+        let arr=[],mult_factor=1, trade_sl=0        ;
+		var trade, config_risk, sl_config_exists=true;
         
-       // log.info('Holdings - ', JSON.stringify(holdings));
+       
        // log.info('Positions - ', JSON.stringify(positions));
     
         for (let index =0; index <holdings.length; index++)
@@ -606,6 +606,7 @@ async function get_position_instruments()
                 {
                         arr.push(holdings[index]['tradingsymbol']);
                        // log.info('Assessing risk for ', holdings[index]['tradingsymbol']);
+                        log.info('Processing holding - ', JSON.stringify(holdings[index]));
                     
                         trade = master_trades.find(trade => (trade['TRADE_INSTRUMENT'] == holdings[index]['tradingsymbol']));
 
@@ -637,71 +638,100 @@ async function get_position_instruments()
                 
               arr.push(positions[index]['tradingsymbol']);
               //log.info('Assessing risk for ', positions[index]['tradingsymbol']);
+              sl_config_exists=true;
               trade = master_trades.find(trade => (trade['TRADE_INSTRUMENT'] == positions[index]['tradingsymbol']));
+              sl_config_exists= (trade==undefined)?false:true;
             
-                    if(trade == undefined)
-                    {
-                                log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
-
-                                //err_count[results[index]['tradingsymbol']]= true;
-
-                                throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
-
-                    }
-                    else
-                    {
-                               // let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
+                           // let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
                         
-                               // log.info('Trade config ',JSON.stringify(trade));
-                               // log.info('Position:', JSON.stringify(positions[index]));
-                        
-                                if(positions[index]['product']==cfg_static['cash_product'] )
+               //log.info('Trade config ',JSON.stringify(trade));
+               //log.info('Position:', JSON.stringify(positions[index]));
+
+                if(positions[index]['product']==cfg_static['cash_product'] )
+                {
+                      //  log.info('Cash Risk'); 
+                    
+                    
+                        if(positions[index]['quantity']>0)
+                        {
+                                
+                                if(!sl_config_exists)
                                 {
-                                      //  log.info('Cash Risk');    
-                                        if(positions[index]['quantity']>0)
-                                        {
-                                                current_risk+= (abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))* positions[index]['quantity']);
-                                        }
-                                        else if(positions[index]['quantity']==0)
-                                        {
-                                            current_risk+= -1 *positions[index]['pnl'];
-                                        }
-                                        else
-                                        {
-                                            if(positions[index]['average_price']>=trade['TARGET'])
-                                            {
-                                                    current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(positions[index]['average_price']))*positions[index]['quantity'];
-                                            }
-                                            else if (positions[index]['average_price']<=trade['STOP_LOSS'])
-                                            {
-                                                     current_risk+= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))*abs(positions[index]['quantity']);
-                                            }
-                                            else
-                                            {
-                                                log.error('Square off price not in between TGT and SL for ',positions[index]['tradingsymbol']);
-                                            }
-
-                                        }
                                     
-                                    
+                                    log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
+                                    throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
+                                }
+                                current_risk+= (abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))* positions[index]['quantity']);
+                       
+                        }
+                        else if(positions[index]['quantity']==0)
+                        {
+                                current_risk+= -1 *positions[index]['pnl'];
+                        }
+                        else //squared off cash position from holdings
+                        {
+                            
+                                if(!sl_config_exists)
+                                {    
+                                    log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
+                                    throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
+                                }
+                            
+                               if(positions[index]['average_price']>=trade['TARGET'])
+                                {
+                                        current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(positions[index]['average_price']))*positions[index]['quantity'];
+                                }
+                                else if (positions[index]['average_price']<=trade['STOP_LOSS'])
+                                {
+                                         current_risk+= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))*abs(positions[index]['quantity']);
                                 }
                                 else
                                 {
-                                        //log.info('FNO risk');
-                                        if(positions[index]['quantity']==0)
-                                        {
-                                            current_risk+= -1 *positions[index]['pnl'];
-                                        }
-                                        else
-                                        {
-                                            current_risk+= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))*abs(positions[index]['quantity']);
-                                        }
-                                        
+                                    log.error('Square off price not in between TGT and SL for ',positions[index]['tradingsymbol']);
                                 }
 
-                             //log.info('Current Risk is now ',current_risk);  
+                        }
 
-                    }
+
+                }
+                else
+                {
+                        //log.info('FNO risk');
+                        if(positions[index]['quantity']==0)
+                        {
+                            current_risk+= -1 *positions[index]['pnl'];
+                        }
+                        else
+                        {
+                            if(trade == undefined)
+                            {
+                                log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
+                                throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
+
+                            }
+
+                            mult_factor = (trade['TRADE_INSTRUMENT_TYPE']=='OPTION')?cfg_static['mult_factor']:1;
+
+                            trade_sl= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(trade['ENTRY']))*abs(positions[index]['quantity'])*mult_factor;
+
+                            log.info('Trade SL - ',trade_sl);
+
+                            if(positions[index]['pnl']<0) //sometimes the FNO position loss can exceed the SL limit
+                            {
+                                current_risk+= Math.max(trade_sl, -1 *positions[index]['pnl']);
+                            }
+                            else
+                            {
+                                current_risk+=trade_sl;    
+                            }
+
+                        }
+
+                }
+
+                             log.info('Current Risk is now ',current_risk);  
+
+                    
 
         }
    
