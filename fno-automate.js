@@ -8,6 +8,7 @@ var abs = require( 'math-abs' );
 var  moment = require("moment-timezone");
 var now = moment();
 var url = require('url');
+var master_trades,cfg_trades,prev_close;
 //console.log('Before load config');
 
 var config_items = require('./load_config.js');
@@ -16,15 +17,17 @@ var config_items = require('./load_config.js');
 //console.log('after load config.. argyment '+ process.argv[2]);
 
 const cfg_static =  new config_items(process.argv[2]);
+const CSVToJSON = require('csvtojson');
 
 //console.log('after creating cfg_static -- '+ JSON.stringify(cfg_static));
-//console.log('zone file -'+cfg_static['zone_file_path']);
+//console.log('zone file - '+cfg_static['zone_file_path']);
 
-const cfg_trades= new config_items(cfg_static['zone_file_path']);
 
-const master_trades= new config_items(cfg_static['master_zone_file_path']);
 
 var err_count={},orders_placed=0, alerts_sent=false;
+
+
+
 
 //console.log('after creating cfg_trades');
 
@@ -35,12 +38,12 @@ const client = require('twilio')(cfg_static['twilio_sid'], cfg_static['twilio_to
 //const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID,process.env.TWILIO_AUTH_TOKEN);
 //console.log(process.env.TWILIO_ACCOUNT_SID);
 //console.log(process.env.TWILIO_AUTH_TOKEN);
-const futures_margins = url.parse('https://api.kite.trade/margins/futures');
+//const futures_margins = url.parse('https://api.kite.trade/margins/futures');
 
 
 
 var max_positions, running=true,current_risk=0;
-var instruments=[], items=[], risk_buffer=0;
+var instruments=[], items=[], risk_buffer=0,filtered_zones=[];
 
 
 var options = {
@@ -57,7 +60,6 @@ var log_opts = {
     };
 
 var log = SimpleNodeLogger.createSimpleLogger( log_opts );
-
 
 
 
@@ -83,16 +85,24 @@ main_logic().then
 async function main_logic()
 {
 
+    
 		try
 		{
 				log.info('Started new execution at ' +dateFormat(new Date(), "yyyymmddhhmmss"));
+                
+                 cfg_trades= await CSVToJSON().fromFile(cfg_static['zone_file_path']);
+                 prev_close = await CSVToJSON().fromFile(cfg_static['prev_close_file_path']);
+
+                 master_trades=  await CSVToJSON().fromFile(cfg_static['master_zone_file_path']);
+            
+                 //await sleep(cfg_static['sleep_window']); 
 				
 				//let str = (moment.tz(now, "Asia/Calcutta").format()).split("T");
 				///let timecomponent=str[1].split(":");
 				//let timevalue=(parseInt(timecomponent[0])*60)+ parseInt(timecomponent[1]);
 				//let running=true;
 				
-			/**	if(timevalue<cfg_static['start_time'] || timevalue >cfg_static['end_time']) 
+			     /**	if(timevalue<cfg_static['start_time'] || timevalue >cfg_static['end_time']) 
 				{
 					log.info(' Outside Market hours');
 					running=false;
@@ -103,11 +113,17 @@ async function main_logic()
 					err_count[cfg_trades[x]['TRADE_INSTRUMENT']]=false;
 				}
 				
+                //log.info('Zones config - ', cfg_trades);
+
+                //log.info('Master Zone config - ', master_trades);
+            
+                
+
 				if(await time_check("Asia/Calcutta",cfg_static['start_time'],cfg_static['end_time']))
 				{
 				
 				
-						let index=0,arr_positions=[],zones=[],trade_type ='';
+						let index=0,arr_positions=[],zones=[],trade_type ='',resp_ohlc=[],symbol_arr=[];
 				
 						if(orders_placed>cfg_static['max_orders_per_run'])
 						{
@@ -129,7 +145,69 @@ async function main_logic()
 						}
 						else
 						{
-								while(running)
+								//let resp_ohlc=[];
+                                            
+                               // arr_positions = await get_position_instruments();
+                            
+                                zones=cfg_trades.concat();
+                                
+                                //log.info('Zones after copying cfg trades ',zones);
+                            
+                                symbol_arr = zones.map(function(item) {
+                                    return cfg_static['default_exchange']+":"+item.SYMBOL;
+                                });
+
+                                resp_ohlc=await kc.getOHLC(symbol_arr);
+                                let prev_cp=0, last_close={};
+                                
+                                for(index=0;index<zones.length;index++) /** initialize the zone gap status right at the beginning**/
+                                {
+                                        
+                                        //prev_cp=prev_close[zones[index]['SYMBOL']]['PREV_CLOSE'];
+                                    
+                                       last_close = prev_close.find(prev_close => (prev_close['SYMBOL'] == zones[index]['SYMBOL']));
+                                       
+                                       //log.info('Last close ', last_close);
+                                                                            
+                                        if(last_close !=undefined)
+                                        {
+                                                prev_cp=last_close['PREV_CLOSE'];
+                                            
+                                                if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']>(1+cfg_static['gap_percent'])*prev_cp)
+                                                    {
+                                                       // log.info('marking gap up for ', zones[index]);
+                                                        zones[index]['GAP_UP']=true;
+                                                    }
+                                                 else if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']<(1-cfg_static['gap_percent'])*prev_cp)
+                                                    {
+                                                        //log.info('marking gap down for ', zones[index]);
+                                                        zones[index]['GAP_DOWN']=true;
+                                                    }
+                                                 else
+                                                    {
+                                                       // log.info('marking no gap for ', zones[index]);
+                                                        zones[index]['GAP_DOWN']=zones[index]['GAP_UP'] =false;
+                                                    }
+                                        }
+                                        else
+                                        {
+                                            log.error('Unable to find prev close for so aborting ',zones[index]['SYMBOL']);
+                                            throw('Unable to find prev close for so aborting ',zones[index]['SYMBOL']);
+                                        }
+                                }
+                            
+                            
+                                //log.info('Zones with Gap status appended - ', JSON.stringify(zones));
+                            
+                                //let gap_zones=zones.filter(function(e){ return (e.GAP_DOWN || e.GAP_UP);});
+                               // let gap_symbols=gap_zones.map(function(item) {
+                                 //   return item.SYMBOL;
+                                //});
+                                
+                                //log.info('Symbols with Gaps - ', JSON.stringify(gap_symbols));
+                       
+                            
+                                while(running)
 								{
 					
 									 try
@@ -173,7 +251,20 @@ async function main_logic()
                                             {
 											     zones = await filter_existing_positions(arr_positions);
                                             }
-											
+										
+                                            let prev_cp=0;
+                                            let entry_price=0;
+                                            let resp_ohlc=[];
+                                            
+                                            let symbol_arr = zones.map(function(item) {
+                                                return cfg_static['default_exchange']+":"+item.SYMBOL;
+                                            });
+                                         
+                                            resp_ohlc=await kc.getOHLC(symbol_arr);
+                                         
+                                           // log.info('RESP OHLC Array - ', resp_ohlc);
+                                            //let arr_gap=[];
+                                         
 											for (index=0; index<zones.length; index++)
 											{
 												
@@ -188,28 +279,41 @@ async function main_logic()
 														{
 														
 																let x= cfg_static['default_exchange']+":"+zones[index]['SYMBOL'];
-																log.info('Iteration - ',index.toString(),' - symbol ',x,' Zone -', zones[index]['ZONE']);
+																//log.info('Iteration - ',index.toString(),' - symbol ',JSON.stringify(zones[index]));
+                                                                trade_type=(zones[index]['ENTRY']>zones[index]['TARGET'])?"SELL":"BUY";
 																												
-																let resp_ltp = await kc.getLTP(x);
-															
-																let price_diff=abs(resp_ltp[x]['last_price']-zones[index]['ENTRY'])/zones[index]['ENTRY'];
+																//let resp_ltp = await kc.getOHLC(x);
+                                                                
+                                                   
+																//let price_diff=abs(resp_ltp[x]['last_price']-zones[index]['ENTRY'])/zones[index]['ENTRY'];
 																let ltp_within_zone=0;
 																
-																trade_type=(zones[index]['ENTRY']>zones[index]['TARGET'])?"SELL":"BUY";
+																//prev_cp=prev_close[zones[index]['SYMBOL']];
 																
 																//log.info('Trade type for ' , x,' is ', trade_type, ' last price is ',resp_ltp[x]['last_price'] );
 																//log.info('Zone SL - ', zones[index]['STOP_LOSS'], ' Entry ', zones[index]['ENTRY']);
 																
 																if(trade_type =='SELL')
 																{
-																	if((resp_ltp[x]['last_price']<zones[index]['STOP_LOSS']) &&(resp_ltp[x]['last_price']>=zones[index]['ENTRY']))
+                                                                    entry_price=zones[index]['GAP_UP']?zones[index]['ENTRY_2']:zones[index]['ENTRY'] ;
+                                                                    
+                                                                    log.info('Symbol - ', zones[index]['SYMBOL'],'entry ',entry_price,'last close -', resp_ohlc[x]['last_price']);
+                                                                    
+                                                                    if((resp_ohlc[x]['last_price']<zones[index]['STOP_LOSS']) &&(resp_ohlc[x]['last_price']>=entry_price))
 																	{
 																		ltp_within_zone=1;
 																	}
-																}
+                                                                    
+																
+                                                                }
 																else
 																{
-																	if((resp_ltp[x]['last_price']>zones[index]['STOP_LOSS']) &&(resp_ltp[x]['last_price']<=zones[index]['ENTRY']))
+                                                                    
+                                                                    entry_price=zones[index]['GAP_DOWN']?zones[index]['ENTRY_2']:zones[index]['ENTRY'] ;
+                                                                    
+                                                                    
+                                                                    
+                                                                    if((resp_ohlc[x]['last_price']>zones[index]['STOP_LOSS']) &&(resp_ohlc[x]['last_price']<=entry_price))
 																	{
 																		ltp_within_zone=1;
 																	}
@@ -225,6 +329,7 @@ async function main_logic()
 																	
 																	log.info('filtered zone ', JSON.stringify(zones[index]));
 																	
+                                                                    filtered_zones.push(zones[index]);
 																	
 																	let order_risk= abs(zones[index]['ENTRY']-zones[index]['STOP_LOSS'])*zones[index]['LOT_SIZE'];
 																
@@ -247,7 +352,9 @@ async function main_logic()
 																	else // place order
 																	{
 																		
-																		user_margin_response = await kc.getMargins("equity");
+																		
+                                                                        
+                                                                        user_margin_response = await kc.getMargins("equity");
 																		
 																		
 																		net_margin= user_margin_response['net'];
@@ -511,6 +618,9 @@ async function main_logic()
                                                         
 												}
 											}
+                                         
+                                            log.info('Filtered zones where LTP hit ', filtered_zones);
+                                         
 									 
 									 }
 									 catch(e)
@@ -637,15 +747,15 @@ async function get_position_instruments()
          {
                 
               arr.push(positions[index]['tradingsymbol']);
-              //log.info('Assessing risk for ', positions[index]['tradingsymbol']);
+              log.info('Assessing risk for ', positions[index]['tradingsymbol'],' position lot is ', positions[index]['quantity']);
               sl_config_exists=true;
               trade = master_trades.find(trade => (trade['TRADE_INSTRUMENT'] == positions[index]['tradingsymbol']));
               sl_config_exists= (trade==undefined)?false:true;
             
                            // let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
                         
-               //log.info('Trade config ',JSON.stringify(trade));
-               //log.info('Position:', JSON.stringify(positions[index]));
+               log.info('Trade Config ',JSON.stringify(trade));
+             //  log.info('Position:', JSON.stringify(positions[index]));
 
                 if(positions[index]['product']==cfg_static['cash_product'] )
                 {
@@ -677,7 +787,9 @@ async function get_position_instruments()
                                     throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
                                 }
                             
-                               if(positions[index]['average_price']>=trade['TARGET'])
+                                current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(trade['TARGET']))*positions[index]['quantity']; //assume that you always got stoplossed for conservative risk analysis
+                            
+                              /** if(positions[index]['average_price']>=trade['TARGET'])
                                 {
                                         current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(positions[index]['average_price']))*positions[index]['quantity'];
                                 }
@@ -688,7 +800,7 @@ async function get_position_instruments()
                                 else
                                 {
                                     log.error('Square off price not in between TGT and SL for ',positions[index]['tradingsymbol']);
-                                }
+                                }**/
 
                         }
 
@@ -729,7 +841,7 @@ async function get_position_instruments()
 
                 }
 
-                             log.info('Current Risk is now ',current_risk);  
+                             //log.info('Current Risk is now ',current_risk);  
 
                     
 

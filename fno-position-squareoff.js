@@ -9,7 +9,7 @@ var  moment = require("moment-timezone");
 var now = moment();
 
 //console.log('Before load config');
-
+//for git
 var config_items = require('./load_config.js');
 
 //console.log('after load config.. argyment '+ process.argv[2]);
