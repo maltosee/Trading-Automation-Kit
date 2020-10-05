@@ -279,7 +279,7 @@ async function main_logic()
 														{
 														
 																let x= cfg_static['default_exchange']+":"+zones[index]['SYMBOL'];
-																//log.info('Iteration - ',index.toString(),' - symbol ',JSON.stringify(zones[index]));
+																log.info('Iteration - ',index.toString(),' - symbol ',JSON.stringify(zones[index]));
                                                                 trade_type=(zones[index]['ENTRY']>zones[index]['TARGET'])?"SELL":"BUY";
 																												
 																//let resp_ltp = await kc.getOHLC(x);
@@ -708,7 +708,7 @@ async function get_position_instruments()
 		var trade, config_risk, sl_config_exists=true;
         
        
-       // log.info('Positions - ', JSON.stringify(positions));
+       log.info('Current risk before processing holdings - ', current_risk);
     
         for (let index =0; index <holdings.length; index++)
         {
@@ -733,7 +733,14 @@ async function get_position_instruments()
                         {
                                 //let x =trade['EXCHANGE']+":"+trade['SYMBOL'];
                                 let lot_qty= Math.max(holdings[index]['t1_quantity'],holdings[index]['quantity']);
-                                current_risk+=(parseFloat(trade['STOP_LOSS'])-parseFloat(holdings[index]['average_price']))*lot_qty;
+								
+								if(trade['STOP_LOSS']<holdings[index]['average_price']) //only if STOP LOSS is below your average price add to risk
+								{
+									
+								
+									current_risk+= (parseFloat(holdings[index]['average_price'])-parseFloat(trade['STOP_LOSS']))*lot_qty;
+									log.info('Current risk after processing holdings - ',holdings[index]['tradingsymbol'],' is ', current_risk);
+								}
 
                         }
 
@@ -771,7 +778,11 @@ async function get_position_instruments()
                                     log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
                                     throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
                                 }
-                                current_risk+= (abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))* positions[index]['quantity']);
+								
+								if(trade['STOP_LOSS']<positions[index]['average_price'])
+								{	
+									current_risk+= (abs(parseFloat(trade['STOP_LOSS'])-parseFloat(positions[index]['average_price']))* positions[index]['quantity']);
+								}	
                        
                         }
                         else if(positions[index]['quantity']==0)
@@ -787,9 +798,14 @@ async function get_position_instruments()
                                     throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
                                 }
                             
-                                current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(trade['TARGET']))*positions[index]['quantity']; //assume that you always got stoplossed for conservative risk analysis
+							
+								if(positions[index]['average_price']<trade['ENTRY'])
+								{
+									
+									current_risk+= abs(parseFloat(positions[index]['average_price'])-parseFloat(trade['ENTRY']))* abs(positions[index]['quantity']); //assume that you always got stoplossed for conservative risk analysis
                             
-                              /** if(positions[index]['average_price']>=trade['TARGET'])
+								}
+							  /** if(positions[index]['average_price']>=trade['TARGET'])
                                 {
                                         current_risk+= abs(parseFloat(trade['TARGET'])-parseFloat(positions[index]['average_price']))*positions[index]['quantity'];
                                 }
@@ -828,13 +844,20 @@ async function get_position_instruments()
 
                             log.info('Trade SL - ',trade_sl);
 
-                            if(positions[index]['pnl']<0) //sometimes the FNO position loss can exceed the SL limit
+                            if(positions[index]['pnl']<0) //sometimes the FNO position loss can exceed the SL
                             {
-                                current_risk+= Math.max(trade_sl, -1 *positions[index]['pnl']);
+								if(trade['STOP_LOSS']>trade['ENTRY']) // add risk only SL not hit yet
+                                {
+									current_risk+= Math.max(trade_sl, -1 *positions[index]['pnl']);
+								}
                             }
                             else
                             {
-                                current_risk+=trade_sl;    
+								
+								if(trade['STOP_LOSS']<trade['ENTRY']) // add risk only SL not hit yet
+                                {
+									current_risk+=Math.max(trade_sl, -1 *positions[index]['pnl']);
+								}
                             }
 
                         }
