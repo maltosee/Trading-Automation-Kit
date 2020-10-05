@@ -9,17 +9,20 @@ var  moment = require("moment-timezone");
 var now = moment();
 
 //console.log('Before load config');
-//for git
+
 var config_items = require('./load_config.js');
 
 //console.log('after load config.. argyment '+ process.argv[2]);
 
 const cfg_static =  new config_items(process.argv[2]);
+const CSVToJSON = require('csvtojson');
+
 
 //console.log('after creating cfg_static -- '+ JSON.stringify(cfg_static));
 //console.log('zone file -'+cfg_static['zone_file_path']);
 
-const cfg_trades= new config_items(cfg_static['zone_file_path']);
+var cfg_trades;
+    //new config_items(cfg_static['zone_file_path']);
 
 var err_count={},orders_placed=0, alerts_sent=false;
 
@@ -135,8 +138,10 @@ async function square_off_tgt_sl()
 				return arr;
 		}
 		
+		cfg_trades =await CSVToJSON().fromFile(cfg_static['zone_file_path']);
 		
-		
+        //log.info('Master trade config - ', cfg_trades);
+    
 		for (let x=0; x<cfg_trades.length; x++)
 		{
 			err_count[cfg_trades[x]['TRADE_INSTRUMENT']]=false;
@@ -146,7 +151,7 @@ async function square_off_tgt_sl()
             
         holdings= await kc.getHoldings(); // initialize here first and avoid calling in while loop, update if you are sqauring off a CNC order only
         log.info('Holdings initially -', holdings); 
-	t1_holdings= holdings.filter(function(e){ return (parseFloat(e.t1_quantity)>0||parseFloat(e.quantity)>0);});
+	   t1_holdings= holdings.filter(function(e){ return (parseFloat(e.t1_quantity)>0||parseFloat(e.quantity)>0);});
         var holdings_changed=false;
 		
 		//log.info('Initialized err count -' , JSON.stringify(err_count));
