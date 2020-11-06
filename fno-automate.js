@@ -297,9 +297,9 @@ async function main_logic()
 																{
                                                                     entry_price=zones[index]['GAP_UP']?zones[index]['ENTRY_2']:zones[index]['ENTRY'] ;
                                                                     
-                                                                    log.info('Symbol - ', zones[index]['SYMBOL'],'entry ',entry_price,'last close -', resp_ohlc[x]['last_price']);
+                                                                  //  log.info('Symbol - ', zones[index]['SYMBOL'],'entry ',entry_price,'last close -', resp_ohlc[x]['last_price']);
                                                                     
-                                                                    if((resp_ohlc[x]['last_price']<zones[index]['STOP_LOSS']) &&(resp_ohlc[x]['last_price']>=entry_price))
+                                                                    if((parseFloat(resp_ohlc[x]['last_price'])<parseFloat(zones[index]['STOP_LOSS']) &&(parseFloat(resp_ohlc[x]['last_price'])>=parseFloat(entry_price))))
 																	{
 																		ltp_within_zone=1;
 																	}
@@ -313,7 +313,7 @@ async function main_logic()
                                                                     
                                                                     
                                                                     
-                                                                    if((resp_ohlc[x]['last_price']>zones[index]['STOP_LOSS']) &&(resp_ohlc[x]['last_price']<=entry_price))
+                                                                    if((parseFloat(resp_ohlc[x]['last_price'])>parseFloat(zones[index]['STOP_LOSS']) &&(parseFloat(resp_ohlc[x]['last_price'])<=parseFloat(entry_price))))
 																	{
 																		ltp_within_zone=1;
 																	}
@@ -831,34 +831,43 @@ async function get_position_instruments()
                         }
                         else
                         {
-                            if(trade == undefined)
-                            {
-                                log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
-                                throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
-
-                            }
-
-                            mult_factor = (trade['TRADE_INSTRUMENT_TYPE']=='OPTION')?cfg_static['mult_factor']:1;
-
-                            trade_sl= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(trade['ENTRY']))*abs(positions[index]['quantity'])*mult_factor;
-
-                            log.info('Trade SL - ',trade_sl);
-
-                            if(positions[index]['pnl']<0) //sometimes the FNO position loss can exceed the SL
-                            {
-								if(trade['STOP_LOSS']>trade['ENTRY']) // add risk only SL not hit yet
+                                if(trade == undefined)
                                 {
-									current_risk+= Math.max(trade_sl, -1 *positions[index]['pnl']);
-								}
-                            }
-                            else
-                            {
-								
-								if(trade['STOP_LOSS']<trade['ENTRY']) // add risk only SL not hit yet
+                                    log.error ('Catastrophe -- position not found in file for ', positions[index]['tradingsymbol']);
+                                    throw('Stop loss config missing for -' + positions[index]['tradingsymbol']);
+
+                                }
+
+                                mult_factor = (trade['TRADE_INSTRUMENT_TYPE']=='OPTION')?cfg_static['mult_factor']:1;
+
+                                trade_sl= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(trade['ENTRY']))*abs(positions[index]['quantity'])*mult_factor;
+
+                                log.info('Trade SL - ',trade_sl);
+                            
+                                if(positions[index]['pnl']<0)
                                 {
-									current_risk+=Math.max(trade_sl, -1 *positions[index]['pnl']);
-								}
-                            }
+                                    current_risk+=Math.max(trade_sl, -1 *positions[index]['pnl']);
+                                }
+                                else
+                                {
+                                    current_risk+=trade_sl;
+                                }
+
+                              /**  if(positions[index]['pnl']<0) //sometimes the FNO position loss can exceed the SL
+                                {
+                                    if(trade['STOP_LOSS']>trade['ENTRY']) // add risk only SL not hit yet
+                                    {
+                                        current_risk+= Math.max(trade_sl, -1 *positions[index]['pnl']);
+                                    }
+                                }
+                                else
+                                {
+
+                                    if(trade['STOP_LOSS']<trade['ENTRY']) // add risk only SL not hit yet
+                                    {
+                                        current_risk+=Math.max(trade_sl, -1 *positions[index]['pnl']);
+                                    }
+                                } **/
 
                         }
 
