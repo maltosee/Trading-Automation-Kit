@@ -41,6 +41,12 @@ const client = require('twilio')(cfg_static['twilio_sid'], cfg_static['twilio_to
 //const futures_margins = url.parse('https://api.kite.trade/margins/futures');
 
 
+const JSONdb = require('simple-json-db');
+
+const persist_key = dateFormat(new Date(), "yyyymmdd");
+const db = new JSONdb(persist_key+".json");
+
+
 
 var max_positions, running=true,current_risk=0;
 var instruments=[], items=[], risk_buffer=0,filtered_zones=[];
@@ -262,12 +268,20 @@ async function main_logic()
                                          
                                             resp_ohlc=await kc.getOHLC(symbol_arr);
                                          
-                                           // log.info('RESP OHLC Array - ', resp_ohlc);
+                                            log.info('RESP OHLC Array - ', resp_ohlc);
                                             //let arr_gap=[];
                                          
 											for (index=0; index<zones.length; index++)
 											{
-												
+											
+												if(db.get(persist_key+zones[index]['TRADE_INSTRUMENT']) == true)
+                                                                                                {
+                                                            
+                                                         						log.error('Order already placed for the day on ' + zones[index]['TRADE_INSTRUMENT']); 
+                                                                                                        err_count[zones[index]['TRADE_INSTRUMENT']] = true;
+    
+                                                                                                }
+
 												if(err_count[zones[index]['TRADE_INSTRUMENT']])
 												{
 														log.error(zones[index]['TRADE_INSTRUMENT'] ,' already had some errors before so skipping');
@@ -280,6 +294,7 @@ async function main_logic()
 														
 																let x= cfg_static['default_exchange']+":"+zones[index]['SYMBOL'];
 																log.info('Iteration - ',index.toString(),' - symbol ',JSON.stringify(zones[index]));
+                                                                log.info('Look up index - ', x);
                                                                 trade_type=(zones[index]['ENTRY']>zones[index]['TARGET'])?"SELL":"BUY";
 																												
 																//let resp_ltp = await kc.getOHLC(x);
@@ -459,7 +474,7 @@ async function main_logic()
 																													"tradingsymbol": zones[index]['TRADE_INSTRUMENT'],
 																													"transaction_type": "BUY",
 																													"quantity": zones[index]['LOT_SIZE'],
-																													"product": cfg_static['fno_product'],
+																													"product": zones[index]['PROD_TYPE'],
 																													"order_type": "LIMIT",
 																													"price":limit_price
 																												});
@@ -498,11 +513,12 @@ async function main_logic()
 																		else
 																		{
 																				
-																				let product_type=(zones[index]['TRADE_INSTRUMENT_TYPE']=='CASH')?cfg_static['cash_product']:cfg_static['fno_product'];
+																				let product_type=(zones[index]['TRADE_INSTRUMENT_TYPE']=='CASH')?cfg_static['cash_product']:zones[index]['PROD_TYPE'];
 																				
-																				if(product_type=='CASH')
+																				if(zones[index]['TRADE_INSTRUMENT_TYPE']=='CASH')
 																				{
-																					reqd_margin= zones[index]['LOT_SIZE']*resp_ltp[x]['last_price'];
+																					//log.info('Look up index before margin calc -',x);
+                                                                                    reqd_margin= zones[index]['LOT_SIZE']*resp_ohlc[x]['last_price'];
 																				}
 																				else 
 																				{
@@ -597,7 +613,9 @@ async function main_logic()
 																		  else
 																		  {
 																			  risk_buffer=risk_buffer-(abs(zones[index]['STOP_LOSS']-zones[index]['ENTRY'])*zones[index]['LOT_SIZE']);
-																			  
+																			   db.set(persist_key+zones[index]['TRADE_INSTRUMENT'], true);
+
+
 																			  await client.messages
 																					  .create({
 																						 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
