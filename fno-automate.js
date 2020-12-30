@@ -8,7 +8,7 @@ var abs = require( 'math-abs' );
 var  moment = require("moment-timezone");
 var now = moment();
 var url = require('url');
-var master_trades,cfg_trades,prev_close;
+var master_trades,cfg_trades,prev_close,gap_zones="";
 //console.log('Before load config');
 
 var config_items = require('./load_config.js');
@@ -177,17 +177,19 @@ async function main_logic()
                                                                             
                                         if(last_close !=undefined)
                                         {
-                                                prev_cp=last_close['PREV_CLOSE'];
+                                                prev_cp=last_close['PREVCLOSE'];
                                             
                                                 if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']>(1+cfg_static['gap_percent'])*prev_cp)
                                                     {
                                                        // log.info('marking gap up for ', zones[index]);
                                                         zones[index]['GAP_UP']=true;
+														gap_zones=gap_zones+","+zones[index]['SYMBOL'];
                                                     }
                                                  else if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']<(1-cfg_static['gap_percent'])*prev_cp)
                                                     {
                                                         //log.info('marking gap down for ', zones[index]);
                                                         zones[index]['GAP_DOWN']=true;
+														gap_zones=gap_zones+","+zones[index]['SYMBOL'];
                                                     }
                                                  else
                                                     {
@@ -203,14 +205,13 @@ async function main_logic()
                                 }
                             
                             
-                                //log.info('Zones with Gap status appended - ', JSON.stringify(zones));
-                            
-                                //let gap_zones=zones.filter(function(e){ return (e.GAP_DOWN || e.GAP_UP);});
-                               // let gap_symbols=gap_zones.map(function(item) {
-                                 //   return item.SYMBOL;
-                                //});
-                                
-                                //log.info('Symbols with Gaps - ', JSON.stringify(gap_symbols));
+								log.info('Gap Zones for the day -- ' , gap_zones);
+								await client.messages
+										  .create({
+											 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
+											 body: 'Gap symbols for today -'+gap_zones,
+											 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
+										   });
                        
                             
                                 while(running)
