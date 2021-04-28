@@ -179,22 +179,40 @@ async function main_logic()
                                         {
                                                 prev_cp=last_close['PREVCLOSE'];
                                             
-                                                if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']>(1+cfg_static['gap_percent'])*prev_cp)
+													if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']>(1+cfg_static['gap_percent'])*prev_cp)
                                                     {
-                                                       // log.info('marking gap up for ', zones[index]);
-                                                        zones[index]['GAP_UP']=true;
+                                                       
 														gap_zones=gap_zones+","+zones[index]['SYMBOL'];
-                                                    }
-                                                 else if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']<(1-cfg_static['gap_percent'])*prev_cp)
+														 zones[index]['GAP_UP']=true;
+														if((zones[index]['ENTRY']>zones[index]['TARGET'])&&(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']>zones[index]['STOP_LOSS'])) //SELL
+														{
+															
+															zones[index]['FAILED']=true;
+															log.info('Zone failed -- ', zones[index]['TRADE_INSTRUMENT']);
+														}
+                                                    
+													}
+													else if(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']<(1-cfg_static['gap_percent'])*prev_cp)
                                                     {
-                                                        //log.info('marking gap down for ', zones[index]);
+                                                        
                                                         zones[index]['GAP_DOWN']=true;
 														gap_zones=gap_zones+","+zones[index]['SYMBOL'];
-                                                    }
-                                                 else
+														
+														if((zones[index]['ENTRY']<zones[index]['TARGET'])&&(resp_ohlc[cfg_static['default_exchange']+":"+zones[index]['SYMBOL']]['ohlc']['open']<zones[index]['STOP_LOSS'])) //BUY
+														{
+															
+															zones[index]['FAILED']=true;
+															log.info('Zone failed -- ', zones[index]['TRADE_INSTRUMENT']);
+														}
+														
+                                                    
+													}
+													else
                                                     {
                                                        // log.info('marking no gap for ', zones[index]);
                                                         zones[index]['GAP_DOWN']=zones[index]['GAP_UP'] =false;
+														zones[index]['FAILED']=false;
+														
                                                     }
                                         }
                                         else
@@ -203,15 +221,28 @@ async function main_logic()
                                             throw('Unable to find prev close for so aborting ',zones[index]['SYMBOL']);
                                         }
                                 }
+								
+								
+							/**	for( let i = 0; i < zones.length; i++)
+								{ 
+    
+										if ( zones[i]['FAILED'] ) { 
+									
+											zones.splice(i, 1); 
+										}
+									
+								} **/
+								
                             
                             
 								log.info('Gap Zones for the day -- ' , gap_zones);
-								await client.messages
+								log.info('Zones after removing failed one -- ', zones);
+								/*await client.messages
 										  .create({
 											 from: 'whatsapp:'+ cfg_static['twilio_sandbox_num'],
 											 body: 'Gap symbols for today -'+gap_zones,
 											 to: 'whatsapp:'+ cfg_static['twilio_subscribed_num']
-										   });
+										   });*/
                        
                             
                                 while(running)
@@ -276,12 +307,12 @@ async function main_logic()
 											{
 											
 												if(db.get(persist_key+zones[index]['TRADE_INSTRUMENT']) == true)
-                                                                                                {
+                                                 {
                                                             
-                                                         						log.error('Order already placed for the day on ' + zones[index]['TRADE_INSTRUMENT']); 
-                                                                                                        err_count[zones[index]['TRADE_INSTRUMENT']] = true;
+														log.error('Order already placed for the day on ' + zones[index]['TRADE_INSTRUMENT']); 
+														err_count[zones[index]['TRADE_INSTRUMENT']] = true;
     
-                                                                                                }
+                                                  }
 
 												if(err_count[zones[index]['TRADE_INSTRUMENT']])
 												{
@@ -290,7 +321,7 @@ async function main_logic()
 												else
 												{
 													
-														if(risk_buffer>0)
+														if(risk_buffer>0 && !(zones[index]['FAILED']))
 														{
 														
 																let x= cfg_static['default_exchange']+":"+zones[index]['SYMBOL'];
@@ -400,7 +431,7 @@ async function main_logic()
 																				/** check order history for the day**/
 																				for (let i=0; i< arr_orders.length; i++)
 																				{
-																					if(arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT'])
+																					if(arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT'] && arr_orders[i]['status']!='CANCELLED' )
 																					{
 
 																							log.error('Pending order already exists for ', top_key);
@@ -534,7 +565,7 @@ async function main_logic()
 																					/** check order history for the day**/
 																						for (let i=0; i< arr_orders.length; i++)
 																						{
-																							if(arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT'])
+																							if(arr_orders[i]['tradingsymbol']==zones[index]['TRADE_INSTRUMENT'] &&arr_orders[i]['status']!='CANCELLED' )
 																							{
 
 																									log.info('Pending future order already exists for ', zones[index]['TRADE_INSTRUMENT']);
@@ -861,9 +892,17 @@ async function get_position_instruments()
 
                                 trade_sl= abs(parseFloat(trade['STOP_LOSS'])-parseFloat(trade['ENTRY']))*abs(positions[index]['quantity'])*mult_factor;
 
-                                log.info('Trade SL - ',trade_sl);
-                            
-                                if(positions[index]['pnl']<0)
+                              //  log.info('Trade SL - ',trade_sl);
+							  
+								if(trade['TRADE_INSTRUMENT_TYPE']=='OPTION')
+								{
+									let premium_loss= cfg_static['premium_loss_percent']*positions[index]['average_price']*abs(positions[index]['quantity']);
+									current_risk+=Math.min(premium_loss,trade_sl);
+									
+									log.info('Option trade trade_sl is ' , trade_sl, ' premium_risk is ', premium_loss);
+
+								}
+							    else if(positions[index]['pnl']<0)
                                 {
                                     current_risk+=Math.max(trade_sl, -1 *positions[index]['pnl']);
                                 }
